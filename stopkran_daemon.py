@@ -25,6 +25,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -184,8 +185,8 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     cfg = ctx.bot_data["config"]
 
-    # Only the owner can respond
-    if query.from_user.id != cfg.get("chat_id"):
+    # Only allow responses from the registered chat
+    if query.message.chat.id != cfg.get("chat_id"):
         await query.answer("⛔ Not authorized", show_alert=True)
         return
 
@@ -546,8 +547,9 @@ async def main():
 
     timeout = cfg.get("timeout", DEFAULT_TIMEOUT)
 
-    # Build the Telegram application
-    app = Application.builder().token(token).build()
+    # Build the Telegram application with increased timeouts
+    request = HTTPXRequest(connect_timeout=30, read_timeout=30)
+    app = Application.builder().token(token).request(request).build()
     app.bot_data["config"] = cfg
 
     app.add_handler(CommandHandler("start", cmd_start))
