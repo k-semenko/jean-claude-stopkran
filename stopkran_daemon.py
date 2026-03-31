@@ -459,11 +459,29 @@ async def handle_hook_connection(
             "permission_suggestions": req.get("permission_suggestions", []),
         }
 
-        msg = await app.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            reply_markup=keyboard,
-        )
+        # Send to Telegram with retry
+        msg = None
+        for attempt in range(3):
+            try:
+                msg = await app.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=keyboard,
+                )
+                break
+            except Exception as e:
+                log.warning("Request %s: send_message attempt %d failed: %s", request_id, attempt + 1, e)
+                if attempt < 2:
+                    await asyncio.sleep(1)
+
+        if msg is None:
+            log.error("Request %s: failed to send to Telegram — auto-denying", request_id)
+            pending.pop(request_id, None)
+            response = json.dumps({"decision": "deny"}) + "\n"
+            writer.write(response.encode("utf-8"))
+            await writer.drain()
+            return
+
         pending[request_id]["tg_message_id"] = msg.message_id
 
         # Wait for user decision or timeout
@@ -546,8 +564,15 @@ async def main():
 
     timeout = cfg.get("timeout", DEFAULT_TIMEOUT)
 
-    # Build the Telegram application
-    app = Application.builder().token(token).build()
+    # Build the Telegram application (increased timeouts for parallel sessions)
+    app = (
+        Application.builder()
+        .token(token)
+        .read_timeout(30)
+        .write_timeout(30)
+        .connect_timeout(15)
+        .build()
+    )
     app.bot_data["config"] = cfg
 
     app.add_handler(CommandHandler("start", cmd_start))
