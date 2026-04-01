@@ -184,8 +184,8 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     cfg = ctx.bot_data["config"]
 
-    # Only allow responses from the registered chat
-    if query.message.chat.id != cfg.get("chat_id"):
+    # Only the owner can respond
+    if query.from_user.id != cfg.get("chat_id"):
         await query.answer("⛔ Not authorized", show_alert=True)
         return
 
